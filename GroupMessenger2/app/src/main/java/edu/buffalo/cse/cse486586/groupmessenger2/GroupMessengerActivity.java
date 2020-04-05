@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
@@ -56,7 +57,6 @@ public class GroupMessengerActivity extends Activity
     static final String TAG = GroupMessengerActivity.class.getSimpleName();
     private String currentPort;
     PriorityQueue<MessagePacket> messageQueue = new PriorityQueue<MessagePacket>(11, new MessageComparator());
-    PriorityQueue<MessagePacket> clonedMessageQueue = new PriorityQueue<MessagePacket>(11, new MessageComparator());
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -144,19 +144,13 @@ public class GroupMessengerActivity extends Activity
                     String port = packet[2];
                     Boolean isReady = Boolean.parseBoolean(packet[3]);
                     String msgSeq = packet[4];
-//                    String failedPort = packet[5];
+                    String failedPort = "";
 
-//                    for(MessagePacket mPacket : messageQueue)
-//                    {
-//                        MessagePacket clonedPacket = new MessagePacket(mPacket.getMessage(),mPacket.getSequenceNo(),
-//                                mPacket.getMyPort(),mPacket.getIsReady());
-//
-//                        clonedMessageQueue.add(clonedPacket);
-//
-//                        if(mPacket.getMyPort().equals(failedPort) && mPacket.getIsReady() == false)
-//                            clonedMessageQueue.remove(mPacket);
-//                    }
-//                    messageQueue = clonedMessageQueue;
+                    if(packet[0].equals("failed"))
+                    {
+                        failedPort = msg;
+                        System.out.println("Server side failed port is: "+failedPort);
+                    }
 
                     if(msgSeq.equals("first"))
                     {
@@ -234,106 +228,155 @@ public class GroupMessengerActivity extends Activity
             ArrayList<Integer> sequenceNos = new ArrayList<Integer>();
             ArrayList<Integer> ports = new ArrayList<Integer>();
             String failedPort = "";
-            try {
-
-
-                for (String port : remotePort) {
-                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                            Integer.parseInt(port));
-
-//                    socket.setSoTimeout(3000);
-
-                    String msgToSend = msgs[0];
-                    PrintWriter prwriter = new PrintWriter(socket.getOutputStream(), true);
-                    StringBuilder packet = new StringBuilder();
-                    packet.append(msgToSend + "_");
-                    packet.append("0" + "_");
-                    packet.append(port + "_");
-                    packet.append("false" + "_");
-                    packet.append("first");
-                    prwriter.println(packet.toString());
-                    prwriter.flush();
-                    InputStreamReader input = new InputStreamReader(socket.getInputStream());
-                    BufferedReader buffreader = new BufferedReader(input);
-
-                    String seq = buffreader.readLine();
-//                    String portInfo = buffreader.readLine();
-                    sequenceInformation.add(seq);
-                    socket.close();
-//                    throw new SocketTimeoutException(packet.toString());
-                }
-//            }
-//            catch (SocketTimeoutException e)
-//            {
-//                System.out.println("Catched exception!!!!");
-//                String packet = e.getMessage();
-//                String[] split = packet.split("_");
-//                failedPort = split[2];
-//                System.out.println("The failed port is: "+failedPort);
-//
-//                for(MessagePacket mPacket : messageQueue)
-//                {
-//                    MessagePacket clonedPacket = new MessagePacket(mPacket.getMessage(),mPacket.getSequenceNo(),
-//                            mPacket.getMyPort(),mPacket.getIsReady());
-//
-//                    clonedMessageQueue.add(clonedPacket);
-//
-//                    if(mPacket.getMyPort().equals(failedPort) && mPacket.getIsReady() == false)
-//                        clonedMessageQueue.remove(mPacket);
-//                }
-//                messageQueue = clonedMessageQueue;
-//            }
-//            catch (UnknownHostException e) {
-//                e.printStackTrace();
-//            }  catch (IOException e) {
-//                e.printStackTrace();
-//            }
-//            try
-//            {
-                for (String s : sequenceInformation)
+            for (String port : remotePort) {
+                if (!port.equals(failedPort))
                 {
-                    String[] splits = s.split("_");
-                    int value = Integer.parseInt(splits[0]);
-                    int key = Integer.parseInt(splits[1]);
-                    sequenceNos.add(value);
-                    ports.add(key);
-                }
-                int finalSeq = Collections.max(sequenceNos);
+                    try {
+                        Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                Integer.parseInt(port));
 
-                List<Integer> indexes = new ArrayList<Integer>();
-                List<Integer> finalPorts = new ArrayList<Integer>();
-                for(int i = 0; i<sequenceNos.size();i++)
-                {
-                    if(sequenceNos.get(i) == finalSeq)
-                        indexes.add(i);
-                }
-                for (Integer i : indexes)
-                {
-                    finalPorts.add(ports.get(i));
-                }
-                Integer maxPort = Collections.max(finalPorts);
+                        socket.setSoTimeout(3000);
+                        System.out.println("started client");
+                        String msgToSend = msgs[0];
+                        PrintWriter prwriter = new PrintWriter(socket.getOutputStream(), true);
+                        StringBuilder packet = new StringBuilder();
+                        packet.append(msgToSend + "_");
+                        packet.append("0" + "_");
+                        packet.append(port + "_");
+                        packet.append("false" + "_");
+                        packet.append("first");
+                        System.out.println("sending msg1 from client");
+                        prwriter.println(packet.toString());
+                        prwriter.flush();
+                        InputStreamReader input = new InputStreamReader(socket.getInputStream());
+                        BufferedReader buffreader = new BufferedReader(input);
 
-                for(String port1 : remotePort)
-                {
-                    Socket socket1 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
-                            Integer.parseInt(port1));
+                        String seq = buffreader.readLine();
+                        sequenceInformation.add(seq);
+                        socket.close();
+                    } catch (SocketTimeoutException e) {
+                        System.out.println("Catched exception!!!!");
+                        failedPort = port;
+                        System.out.println("The failed port is: " + failedPort);
 
-                    String msgToSend = msgs[0];
-                    PrintWriter prwriter = new PrintWriter(socket1.getOutputStream(), true);
-                    StringBuilder packet = new StringBuilder();
-                    packet.append(msgToSend+"_");
-                    packet.append(Integer.toString(finalSeq)+"_");
-                    packet.append(maxPort+"_");
-                    packet.append("true"+"_");
-                    packet.append("second");
-                    prwriter.println(packet.toString());
-                    Log.e(TAG,packet.toString());
+                        Iterator<MessagePacket> itr = messageQueue.iterator();
+
+                        while (itr.hasNext()) {
+                            MessagePacket msgToRemove = itr.next();
+                            if (msgToRemove.getMyPort().equals(failedPort))
+                                messageQueue.remove(msgToRemove);
+                        }
+
+                        try {
+                            for (String port1 : remotePort) {
+                                if (!port.equals(failedPort)) {
+                                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                            Integer.parseInt(port1));
+
+                                    PrintWriter prwriter = new PrintWriter(socket.getOutputStream(), true);
+                                    StringBuilder packet = new StringBuilder();
+                                    packet.append(failedPort + "_");
+                                    packet.append("failed");
+                                    prwriter.println(packet);
+                                    prwriter.flush();
+                                }
+                            }
+
+                        } catch (UnknownHostException e1) {
+                            Log.e(TAG, "ClientTask UnknownHostException");
+                        } catch (IOException e1) {
+                            Log.e(TAG, "ClientTask socket IOException");
+                        }
+
+                    } catch (UnknownHostException e) {
+                        e.printStackTrace();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+
+            //Part2
+
+            for (String s : sequenceInformation) {
+                String[] splits = s.split("_");
+                int value = Integer.parseInt(splits[0]);
+                int key = Integer.parseInt(splits[1]);
+                sequenceNos.add(value);
+                ports.add(key);
+            }
+            int finalSeq = Collections.max(sequenceNos);
+
+            List<Integer> indexes = new ArrayList<Integer>();
+            List<Integer> finalPorts = new ArrayList<Integer>();
+            for (int i = 0; i < sequenceNos.size(); i++) {
+                if (sequenceNos.get(i) == finalSeq)
+                    indexes.add(i);
+            }
+            for (Integer i : indexes) {
+                finalPorts.add(ports.get(i));
+            }
+            Integer maxPort = Collections.max(finalPorts);
+
+            for (String port1 : remotePort) {
+                if (!port1.equals(failedPort)) {
+                    try {
+                        Socket socket1 = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                Integer.parseInt(port1));
+
+                        socket1.setSoTimeout(3000);
+                        System.out.println("started part 2 in client");
+                        String msgToSend = msgs[0];
+                        PrintWriter prwriter = new PrintWriter(socket1.getOutputStream(), true);
+                        StringBuilder packet = new StringBuilder();
+                        packet.append(msgToSend + "_");
+                        packet.append(Integer.toString(finalSeq) + "_");
+                        packet.append(maxPort + "_");
+                        packet.append("true" + "_");
+                        packet.append("second");
+                        System.out.println("sending msg2 from client");
+                        prwriter.println(packet.toString());
 //                    socket1.close();
+                    } catch (SocketTimeoutException e) {
+                        System.out.println("Catched exception in part 2!!!!");
+                        failedPort = port1;
+                        System.out.println("The failed port is: " + failedPort);
+
+                        Iterator<MessagePacket> itr = messageQueue.iterator();
+
+                        while (itr.hasNext()) {
+                            MessagePacket msgToRemove = itr.next();
+                            if (msgToRemove.getMyPort().equals(failedPort))
+                                messageQueue.remove(msgToRemove);
+                        }
+
+                        try {
+                            for (String port2 : remotePort) {
+                                if (!port2.equals(failedPort)) {
+                                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                            Integer.parseInt(port2));
+
+                                    PrintWriter prwriter = new PrintWriter(socket.getOutputStream(), true);
+                                    StringBuilder packet = new StringBuilder();
+                                    packet.append(failedPort + "_");
+                                    packet.append("failed");
+                                    prwriter.println(packet);
+                                    prwriter.flush();
+                                }
+                            }
+
+                        } catch (UnknownHostException e1) {
+                            Log.e(TAG, "ClientTask UnknownHostException");
+                        } catch (IOException e1) {
+                            Log.e(TAG, "ClientTask socket IOException");
+                        }
+
+                    } catch (UnknownHostException e) {
+                        Log.e(TAG, "ClientTask UnknownHostException");
+                    } catch (IOException e) {
+                        Log.e(TAG, "ClientTask socket IOException");
+                    }
                 }
-            } catch (UnknownHostException e) {
-                Log.e(TAG, "ClientTask UnknownHostException");
-            } catch (IOException e) {
-                Log.e(TAG, "ClientTask socket IOException");
             }
             return null;
         }
