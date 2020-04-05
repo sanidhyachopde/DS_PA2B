@@ -146,13 +146,24 @@ public class GroupMessengerActivity extends Activity
                     String msgSeq = packet[4];
                     String failedPort = "";
 
-                    if(packet[0].equals("failed"))
+                    System.out.println("in server packet 1 value: "+seqNo);
+
+                    if(seqNo.equals("failed"))
                     {
                         failedPort = msg;
                         System.out.println("Server side failed port is: "+failedPort);
+                        Iterator<MessagePacket> itr = messageQueue.iterator();
+
+                        while (itr.hasNext()) {
+                            MessagePacket msgToRemove = itr.next();
+                            if (msgToRemove.getMyPort().equals(failedPort) && msgToRemove.getIsReady()==false)
+                                messageQueue.remove(msgToRemove);
+                        }
                     }
 
-                    if(msgSeq.equals("first"))
+                    System.out.println("in server msg seq value: "+msgSeq);
+
+                    if(msgSeq!=null && msgSeq.equals("first"))
                     {
                         MessagePacket mPacket = new MessagePacket(msg, Integer.parseInt(seqNo),currentPort,isReady);
                         messageQueue.add(mPacket);
@@ -164,7 +175,7 @@ public class GroupMessengerActivity extends Activity
                         prwriter.println(sb.toString());
 //                        sequence++;
                     }
-                    else
+                    else if(msgSeq!=null && msgSeq.equals("second"))
                     {
                         sequence = Math.max(Integer.parseInt(seqNo), sequence);
                         for(MessagePacket mp : messageQueue) {
@@ -177,15 +188,18 @@ public class GroupMessengerActivity extends Activity
 
                         while(!messageQueue.isEmpty() && messageQueue.peek().getIsReady()== true)
                         {
-                            String msgToSend = messageQueue.poll().getMessage();
+                            MessagePacket toSend = messageQueue.poll();
+                            if(!toSend.getMyPort().equals(failedPort)) {
+                                String msgToSend = toSend.getMessage();
 
-                            ContentValues keyValueToInsert = new ContentValues();
-                            keyValueToInsert.put("key", count);
-                            count++;
-                            keyValueToInsert.put("value",msgToSend);
-                            getContentResolver().insert(providerUri, keyValueToInsert);
+                                ContentValues keyValueToInsert = new ContentValues();
+                                keyValueToInsert.put("key", count);
+                                count++;
+                                keyValueToInsert.put("value", msgToSend);
+                                getContentResolver().insert(providerUri, keyValueToInsert);
 
-                            publishProgress(msgToSend);
+                                publishProgress(msgToSend);
+                            }
                         }
                     }
                 }
@@ -248,6 +262,7 @@ public class GroupMessengerActivity extends Activity
                         System.out.println("sending msg1 from client");
                         prwriter.println(packet.toString());
                         prwriter.flush();
+
                         InputStreamReader input = new InputStreamReader(socket.getInputStream());
                         BufferedReader buffreader = new BufferedReader(input);
 
@@ -263,13 +278,13 @@ public class GroupMessengerActivity extends Activity
 
                         while (itr.hasNext()) {
                             MessagePacket msgToRemove = itr.next();
-                            if (msgToRemove.getMyPort().equals(failedPort))
+                            if (msgToRemove.getMyPort().equals(failedPort) && msgToRemove.getIsReady()==false)
                                 messageQueue.remove(msgToRemove);
                         }
 
                         try {
                             for (String port1 : remotePort) {
-                                if (!port.equals(failedPort)) {
+                                if (!port1.equals(failedPort)) {
                                     Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
                                             Integer.parseInt(port1));
 
@@ -277,6 +292,7 @@ public class GroupMessengerActivity extends Activity
                                     StringBuilder packet = new StringBuilder();
                                     packet.append(failedPort + "_");
                                     packet.append("failed");
+                                    System.out.println("Client 1 socket expn: "+packet);
                                     prwriter.println(packet);
                                     prwriter.flush();
                                 }
@@ -291,7 +307,40 @@ public class GroupMessengerActivity extends Activity
                     } catch (UnknownHostException e) {
                         e.printStackTrace();
                     } catch (IOException e) {
-                        e.printStackTrace();
+                        System.out.println("Catched IO exception!!!!");
+                        failedPort = port;
+                        System.out.println("The failed port is: " + failedPort);
+
+                        Iterator<MessagePacket> itr = messageQueue.iterator();
+
+                        while (itr.hasNext()) {
+                            MessagePacket msgToRemove = itr.next();
+                            if (msgToRemove.getMyPort().equals(failedPort) && msgToRemove.getIsReady()==false)
+                                messageQueue.remove(msgToRemove);
+                        }
+
+                        try {
+                            for (String port1 : remotePort) {
+                                if (!port1.equals(failedPort)) {
+                                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                            Integer.parseInt(port1));
+
+                                    PrintWriter prwriter = new PrintWriter(socket.getOutputStream(), true);
+                                    StringBuilder packet = new StringBuilder();
+                                    packet.append(failedPort + "_");
+                                    packet.append("failed");
+                                    System.out.println("Client 1 IO expn: "+packet);
+                                    prwriter.println(packet);
+                                    prwriter.flush();
+                                }
+                            }
+
+                        } catch (UnknownHostException e1) {
+                            Log.e(TAG, "ClientTask UnknownHostException");
+                        } catch (IOException e1) {
+                            Log.e(TAG, "ClientTask socket IOException");
+                        }
+
                     }
                 }
             }
@@ -299,11 +348,13 @@ public class GroupMessengerActivity extends Activity
             //Part2
 
             for (String s : sequenceInformation) {
-                String[] splits = s.split("_");
-                int value = Integer.parseInt(splits[0]);
-                int key = Integer.parseInt(splits[1]);
-                sequenceNos.add(value);
-                ports.add(key);
+                if(s!=null && !s.isEmpty()) {
+                    String[] splits = s.split("_");
+                    int value = Integer.parseInt(splits[0]);
+                    int key = Integer.parseInt(splits[1]);
+                    sequenceNos.add(value);
+                    ports.add(key);
+                }
             }
             int finalSeq = Collections.max(sequenceNos);
 
@@ -346,7 +397,7 @@ public class GroupMessengerActivity extends Activity
 
                         while (itr.hasNext()) {
                             MessagePacket msgToRemove = itr.next();
-                            if (msgToRemove.getMyPort().equals(failedPort))
+                            if (msgToRemove.getMyPort().equals(failedPort) && msgToRemove.getIsReady()==false)
                                 messageQueue.remove(msgToRemove);
                         }
 
@@ -360,6 +411,7 @@ public class GroupMessengerActivity extends Activity
                                     StringBuilder packet = new StringBuilder();
                                     packet.append(failedPort + "_");
                                     packet.append("failed");
+                                    System.out.println("Client 2 socket expn: "+packet);
                                     prwriter.println(packet);
                                     prwriter.flush();
                                 }
@@ -374,6 +426,40 @@ public class GroupMessengerActivity extends Activity
                     } catch (UnknownHostException e) {
                         Log.e(TAG, "ClientTask UnknownHostException");
                     } catch (IOException e) {
+                        System.out.println("Catched IO exception!!!!");
+                        failedPort = port1;
+                        System.out.println("The failed port is: " + failedPort);
+
+                        Iterator<MessagePacket> itr = messageQueue.iterator();
+
+                        while (itr.hasNext()) {
+                            MessagePacket msgToRemove = itr.next();
+                            if (msgToRemove.getMyPort().equals(failedPort) && msgToRemove.getIsReady()==false)
+                                messageQueue.remove(msgToRemove);
+                        }
+
+                        try {
+                            for (String port3 : remotePort) {
+                                if (!port3.equals(failedPort)) {
+                                    Socket socket = new Socket(InetAddress.getByAddress(new byte[]{10, 0, 2, 2}),
+                                            Integer.parseInt(port3));
+
+                                    PrintWriter prwriter = new PrintWriter(socket.getOutputStream(), true);
+                                    StringBuilder packet = new StringBuilder();
+                                    packet.append(failedPort + "_");
+                                    packet.append("failed");
+                                    System.out.println("Client 2 IO expn: "+packet);
+                                    prwriter.println(packet);
+                                    prwriter.flush();
+                                }
+                            }
+
+                        } catch (UnknownHostException e1) {
+                            Log.e(TAG, "ClientTask UnknownHostException");
+                        } catch (IOException e1) {
+                            Log.e(TAG, "ClientTask socket IOException");
+                        }
+
                         Log.e(TAG, "ClientTask socket IOException");
                     }
                 }
